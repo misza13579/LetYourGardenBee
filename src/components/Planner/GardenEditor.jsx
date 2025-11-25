@@ -117,7 +117,7 @@ const BLOOMING_CALENDAR = {
   IX: ['rose', 'sunflower']
 };
 
-const GardenChatbotAI = () => {
+const GardenChatbot = () => {
   const [messages, setMessages] = useState([
     { type: 'bot', text: "Cześć! Jestem Twoim asystentem ogrodowym. Zapytaj mnie o rośliny, owady lub planowanie ogrodu! 🌸" }
   ]);
