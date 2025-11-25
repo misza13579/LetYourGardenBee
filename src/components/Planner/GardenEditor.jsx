@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 
-// Rozszerzona baza roślin z gęstością sadzenia
+// Rozszerzona baza roślin z poprawionymi parametrami
 const PLANT_DATABASE = {
   sunflower: {
     id: 'sunflower',
@@ -11,9 +11,10 @@ const PLANT_DATABASE = {
     sun: 'słoneczne',
     insects: ['pszczoły', 'trzmiele'],
     image: '/sloneczniki.png',
-    density: { min: 1, max: 2, optimal: 1 }, // rośliny/m²
-    waterNeed: 'medium',
-    maintenance: { cost: 5, effort: 2 }
+    density: "1-2 rośliny/m²", // Czytelniejszy opis
+    waterNeed: 30, // litry/m²/rok
+    maintenance: 2, // trudność 1-5 (1=łatwa, 5=trudna)
+    description: "Roślina jednoroczna, łatwa w uprawie, wymaga podpór"
   },
   lavender: {
     id: 'lavender',
@@ -24,9 +25,10 @@ const PLANT_DATABASE = {
     sun: 'słoneczne',
     insects: ['pszczoły', 'motyle'],
     image: '/lawenda.png',
-    density: { min: 4, max: 6, optimal: 5 },
-    waterNeed: 'low',
-    maintenance: { cost: 8, effort: 1 }
+    density: "4-6 roślin/m²",
+    waterNeed: 15,
+    maintenance: 1,
+    description: "Wieloletnia, odporna na suszę, przycinana wiosną"
   },
   rose: {
     id: 'rose',
@@ -37,9 +39,10 @@ const PLANT_DATABASE = {
     sun: 'słoneczne',
     insects: ['pszczoły', 'trzmiele'],
     image: '/roze.png',
-    density: { min: 1, max: 3, optimal: 2 },
-    waterNeed: 'medium',
-    maintenance: { cost: 15, effort: 4 }
+    density: "1-3 rośliny/m²",
+    waterNeed: 40,
+    maintenance: 4,
+    description: "Wymaga regularnego nawożenia i przycinania"
   }
 };
 
@@ -49,29 +52,29 @@ const TERRAIN_ELEMENTS = {
     id: 'grass',
     name: 'Trawa',
     image: '/trawa.png',
-    waterNeed: 'high',
-    maintenance: { cost: 3, effort: 3 }
+    waterNeed: 50,
+    maintenance: 3
   },
   water: {
     id: 'water',
     name: 'Woda',
     image: '/woda.png',
-    waterNeed: 'none',
-    maintenance: { cost: 20, effort: 2 }
+    waterNeed: 0, // Źródła wody nie zużywają wody
+    maintenance: 1
   },
   building: {
     id: 'building',
     name: 'Zabudowa',
     image: '/cegly.png',
-    waterNeed: 'none',
-    maintenance: { cost: 0, effort: 0 }
+    waterNeed: 0,
+    maintenance: 0
   },
   soil: {
     id: 'soil',
     name: 'Ziemia',
     image: '/ziemia.png',
-    waterNeed: 'none',
-    maintenance: { cost: 0, effort: 0 }
+    waterNeed: 0,
+    maintenance: 0
   }
 };
 
@@ -229,22 +232,35 @@ export default function AdvancedGardenPlanner() {
       return acc;
     }, {});
 
-    // Obliczenia gęstości
-    const densityAnalysis = Object.values(plantStats).map(stat => {
-      const density = stat.plant.density;
-      const currentDensity = stat.count;
-      const status = currentDensity < density.min ? 'za mało' : 
-                    currentDensity > density.max ? 'za dużo' : 'optymalnie';
-      
-      return {
-        plant: stat.plant,
-        current: currentDensity,
-        recommended: density.optimal,
-        status,
-        score: currentDensity >= density.min && currentDensity <= density.max ? 100 : 
-               Math.max(0, 100 - Math.abs(currentDensity - density.optimal) * 20)
-      };
-    });
+    // ROCZNE ZAPOTRZEBOWANIE NA WODĘ (w litrach)
+    const annualWaterNeed = allCells.reduce((total, cell) => {
+      if (cell.type === 'element' && cell.element.waterNeed) {
+        return total + cell.element.waterNeed;
+      }
+      return total;
+    }, 0);
+
+    // TRUDNOŚĆ PIELĘGNACJI (średnia ważona)
+    const maintenanceAnalysis = allCells.reduce((acc, cell) => {
+      if (cell.type === 'element' && cell.element.maintenance) {
+        acc.totalDifficulty += cell.element.maintenance;
+        acc.elementsWithDifficulty++;
+      }
+      return acc;
+    }, { totalDifficulty: 0, elementsWithDifficulty: 0 });
+
+    const averageDifficulty = maintenanceAnalysis.elementsWithDifficulty > 0 
+      ? (maintenanceAnalysis.totalDifficulty / maintenanceAnalysis.elementsWithDifficulty).toFixed(1)
+      : 0;
+
+    // Opis trudności
+    const getDifficultyDescription = (difficulty) => {
+      if (difficulty === 0) return 'Brak roślin';
+      if (difficulty < 2) return 'Bardzo łatwy';
+      if (difficulty < 3) return 'Łatwy';
+      if (difficulty < 4) return 'Średni';
+      return 'Trudny';
+    };
 
     // Przyciąganie owadów
     const insectAttraction = Object.keys(INSECTS_DATABASE).reduce((acc, insectId) => {
@@ -285,41 +301,6 @@ export default function AdvancedGardenPlanner() {
       return { continuity, score: continuityScore, gaps: months.length - bloomingMonths };
     };
 
-    // Bilans wodny
-    const waterBalance = () => {
-      const waterNeeds = allCells.reduce((acc, cell) => {
-        if (cell.type === 'element') {
-          const element = cell.element;
-          const need = element.waterNeed;
-          if (need && need !== 'none') {
-            const points = need === 'low' ? 0.5 : need === 'medium' ? 1 : 2;
-            acc.totalNeed += points;
-          }
-        }
-        return acc;
-      }, { totalNeed: 0 });
-
-      const waterSupply = waterSources * 3; // każde źródło wody zaspokaja 3 punkty potrzeb
-      const balance = waterSupply - waterNeeds.totalNeed;
-      
-      return {
-        totalNeed: waterNeeds.totalNeed,
-        waterSupply,
-        balance,
-        status: balance >= 0 ? 'wystarczający' : 'niewystarczający'
-      };
-    };
-
-    // Koszty utrzymania
-    const maintenanceCosts = allCells.reduce((acc, cell) => {
-      if (cell.type === 'element' && cell.element.maintenance) {
-        acc.totalCost += cell.element.maintenance.cost;
-        acc.totalEffort += cell.element.maintenance.effort;
-        acc.elements++;
-      }
-      return acc;
-    }, { totalCost: 0, totalEffort: 0, elements: 0 });
-
     // Wskaźnik bioróżnorodności
     const biodiversity = () => {
       const plantTypes = new Set();
@@ -350,7 +331,6 @@ export default function AdvancedGardenPlanner() {
     const generateRecommendations = () => {
       const recommendations = [];
       const bio = biodiversity();
-      const water = waterBalance();
       const continuity = bloomingContinuity();
 
       if (bio.plantTypes < 2) {
@@ -361,11 +341,11 @@ export default function AdvancedGardenPlanner() {
         });
       }
 
-      if (water.balance < 0) {
+      if (annualWaterNeed > 1000) {
         recommendations.push({
           type: 'water',
-          message: `Dodaj źródła wody - brakuje ${Math.abs(water.balance).toFixed(1)} punktów wodnych`,
-          priority: 'high'
+          message: `Wysokie zapotrzebowanie na wodę: ${annualWaterNeed}L/rok - rozważ rośliny odporne na suszę`,
+          priority: 'medium'
         });
       }
 
@@ -385,15 +365,13 @@ export default function AdvancedGardenPlanner() {
         });
       }
 
-      densityAnalysis.forEach(analysis => {
-        if (analysis.status !== 'optymalnie') {
-          recommendations.push({
-            type: 'density',
-            message: `${analysis.plant.name}: ${analysis.status} (${analysis.current} zamiast ${analysis.recommended}/m²)`,
-            priority: analysis.status === 'za mało' ? 'medium' : 'low'
-          });
-        }
-      });
+      if (averageDifficulty > 3.5) {
+        recommendations.push({
+          type: 'maintenance',
+          message: `Wysoka trudność pielęgnacji - rozważ łatwiejsze w utrzymaniu rośliny`,
+          priority: 'medium'
+        });
+      }
 
       return recommendations.slice(0, 5); // Maksymalnie 5 rekomendacji
     };
@@ -408,11 +386,14 @@ export default function AdvancedGardenPlanner() {
       
       // Zaawansowane
       plantStats,
-      densityAnalysis,
+      annualWaterNeed,
+      maintenance: {
+        averageDifficulty: parseFloat(averageDifficulty),
+        description: getDifficultyDescription(parseFloat(averageDifficulty)),
+        totalElements: maintenanceAnalysis.elementsWithDifficulty
+      },
       insectAttraction,
       bloomingContinuity: bloomingContinuity(),
-      waterBalance: waterBalance(),
-      maintenanceCosts,
       biodiversity: biodiversity(),
       recommendations: generateRecommendations(),
       
@@ -421,8 +402,8 @@ export default function AdvancedGardenPlanner() {
       overallScore: Math.round(
         (biodiversity().overallScore * 0.3 +
          bloomingContinuity().score * 0.3 +
-         (waterBalance().balance >= 0 ? 100 : 50) * 0.2 +
-         (densityAnalysis.reduce((sum, d) => sum + d.score, 0) / Math.max(densityAnalysis.length, 1)) * 0.2)
+         (annualWaterNeed < 500 ? 100 : annualWaterNeed < 1000 ? 80 : 60) * 0.2 +
+         (parseFloat(averageDifficulty) < 3 ? 100 : parseFloat(averageDifficulty) < 4 ? 80 : 60) * 0.2)
       )
     };
   };
@@ -446,6 +427,32 @@ export default function AdvancedGardenPlanner() {
     const startY = Math.min(selectionStart.y, selectionEnd.y);
     const endY = Math.max(selectionStart.y, selectionEnd.y);
     return x >= startX && x <= endX && y >= startY && y <= endY;
+  };
+
+  // Komponent gwiazdek dla trudności
+  const DifficultyStars = ({ difficulty }) => {
+    const fullStars = Math.floor(difficulty);
+    const hasHalfStar = difficulty % 1 !== 0;
+    
+    return (
+      <div className="flex items-center gap-1">
+        {[...Array(5)].map((_, i) => (
+          <span
+            key={i}
+            className={`text-lg ${
+              i < fullStars
+                ? 'text-yellow-500'
+                : i === fullStars && hasHalfStar
+                ? 'text-yellow-300'
+                : 'text-gray-300'
+            }`}
+          >
+            {i < fullStars ? '★' : i === fullStars && hasHalfStar ? '⯨' : '★'}
+          </span>
+        ))}
+        <span className="text-sm text-[#49733D] ml-1">{difficulty}/5</span>
+      </div>
+    );
   };
 
   return (
@@ -568,9 +575,12 @@ export default function AdvancedGardenPlanner() {
                         alt={plant.name}
                         className="w-12 h-12 mx-auto mb-2 object-cover rounded-lg"
                       />
-                      <div className="text-sm text-[#49733D]">{plant.name}</div>
+                      <div className="text-sm text-[#49733D] font-medium">{plant.name}</div>
                       <div className="text-xs text-[#49733D]/70 mt-1">
-                        {plant.density.optimal}/m²
+                        {plant.density}
+                      </div>
+                      <div className="mt-1">
+                        <DifficultyStars difficulty={plant.maintenance} />
                       </div>
                     </div>
                   ))}
@@ -743,6 +753,43 @@ export default function AdvancedGardenPlanner() {
                   </div>
                 </div>
 
+                {/* Zapotrzebowanie na wodę */}
+                <div className="bg-white/60 rounded-xl p-6 border border-[#A496D9]/20">
+                  <h3 className="text-lg text-[#49733D] mb-4">Zapotrzebowanie na wodę</h3>
+                  <div className="space-y-4">
+                    <div className="text-center">
+                      <div className="text-3xl text-[#49733D] font-medium">
+                        {stats.annualWaterNeed}L
+                      </div>
+                      <div className="text-sm text-[#49733D]">rocznie</div>
+                    </div>
+                    <div className="text-sm text-[#49733D] text-center">
+                      {stats.annualWaterNeed < 500 
+                        ? 'Niskie zapotrzebowanie - rośliny odporne na suszę' 
+                        : stats.annualWaterNeed < 1000
+                        ? 'Umiarkowane zapotrzebowanie'
+                        : 'Wysokie zapotrzebowanie - rozważ system nawadniania'
+                      }
+                    </div>
+                  </div>
+                </div>
+
+                {/* Trudność pielęgnacji */}
+                <div className="bg-white/60 rounded-xl p-6 border border-[#A496D9]/20">
+                  <h3 className="text-lg text-[#49733D] mb-4">Trudność pielęgnacji</h3>
+                  <div className="space-y-4 text-center">
+                    <div className="flex justify-center">
+                      <DifficultyStars difficulty={stats.maintenance.averageDifficulty} />
+                    </div>
+                    <div className="text-lg text-[#49733D] font-medium">
+                      {stats.maintenance.description}
+                    </div>
+                    <div className="text-sm text-[#49733D]">
+                      Średnia trudność dla {stats.maintenance.totalElements} elementów
+                    </div>
+                  </div>
+                </div>
+
                 {/* Przyciąganie owadów */}
                 <div className="bg-white/60 rounded-xl p-6 border border-[#A496D9]/20">
                   <h3 className="text-lg text-[#49733D] mb-4">Przyciąganie owadów</h3>
@@ -785,45 +832,6 @@ export default function AdvancedGardenPlanner() {
                   </div>
                 </div>
 
-                {/* Bilans wodny */}
-                <div className="bg-white/60 rounded-xl p-6 border border-[#A496D9]/20">
-                  <h3 className="text-lg text-[#49733D] mb-4">Bilans wodny</h3>
-                  <div className="space-y-3">
-                    <div className="flex justify-between">
-                      <span className="text-[#49733D]">Zapotrzebowanie</span>
-                      <span className="text-[#49733D]">{stats.waterBalance.totalNeed.toFixed(1)} pkt</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-[#49733D]">Dostawa wody</span>
-                      <span className="text-[#49733D]">{stats.waterBalance.waterSupply} pkt</span>
-                    </div>
-                    <div className="flex justify-between font-medium">
-                      <span className="text-[#49733D]">Bilans</span>
-                      <span className={stats.waterBalance.balance >= 0 ? 'text-green-600' : 'text-red-600'}>
-                        {stats.waterBalance.balance.toFixed(1)} pkt
-                      </span>
-                    </div>
-                    <div className={`text-sm text-center ${stats.waterBalance.balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {stats.waterBalance.status}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Koszty utrzymania */}
-                <div className="bg-white/60 rounded-xl p-6 border border-[#A496D9]/20">
-                  <h3 className="text-lg text-[#49733D] mb-4">Koszty utrzymania</h3>
-                  <div className="space-y-3">
-                    <div className="flex justify-between">
-                      <span className="text-[#49733D]">Roczne koszty</span>
-                      <span className="text-[#49733D] font-medium">{stats.maintenanceCosts.totalCost} zł</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-[#49733D]">Wysiłek (1-5)</span>
-                      <span className="text-[#49733D]">{stats.maintenanceCosts.totalEffort}</span>
-                    </div>
-                  </div>
-                </div>
-
                 {/* Rekomendacje */}
                 {stats.recommendations.length > 0 && (
                   <div className="bg-white/60 rounded-xl p-6 border border-[#A496D9]/20">
@@ -858,29 +866,36 @@ export default function AdvancedGardenPlanner() {
                         />
                       </div>
                       <div className="flex-1">
-                        <h3 className="text-lg text-[#49733D]">{plant.name}</h3>
+                        <h3 className="text-lg text-[#49733D] font-medium">{plant.name}</h3>
+                        <p className="text-sm text-[#49733D] mt-1 italic">{plant.description}</p>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-[#49733D] mt-3">
                           <div className="flex items-center gap-2">
-                            <span>Kwitnienie: {plant.blooming.join(', ')}</span>
+                            <span className="font-medium">Kwitnienie:</span>
+                            <span>{plant.blooming.join(', ')}</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span>Wysokość: {plant.height}</span>
+                            <span className="font-medium">Wysokość:</span>
+                            <span>{plant.height}</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span>Gleba: {plant.soil}</span>
+                            <span className="font-medium">Gleba:</span>
+                            <span>{plant.soil}</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span>Stanowisko: {plant.sun}</span>
+                            <span className="font-medium">Stanowisko:</span>
+                            <span>{plant.sun}</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span>Gęstość: {plant.density.optimal}/m²</span>
+                            <span className="font-medium">Gęstość:</span>
+                            <span>{plant.density}</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span>Woda: {plant.waterNeed}</span>
+                            <span className="font-medium">Woda:</span>
+                            <span>{plant.waterNeed}L/m²/rok</span>
                           </div>
                         </div>
                         <div className="mt-4 flex items-center gap-3">
-                          <span className="text-[#49733D]">Przyciąga:</span>
+                          <span className="text-[#49733D] font-medium">Przyciąga:</span>
                           <div className="flex gap-2">
                             {plant.insects.map(insect => (
                               <span key={insect} className="bg-[#A496D9]/20 text-[#49733D] px-3 py-1 rounded-full text-xs">
@@ -888,6 +903,10 @@ export default function AdvancedGardenPlanner() {
                               </span>
                             ))}
                           </div>
+                        </div>
+                        <div className="mt-3">
+                          <span className="text-[#49733D] font-medium mr-2">Trudność:</span>
+                          <DifficultyStars difficulty={plant.maintenance} />
                         </div>
                       </div>
                     </div>
@@ -917,10 +936,10 @@ export default function AdvancedGardenPlanner() {
                         />
                       </div>
                       <div className="flex-1">
-                        <h3 className="text-lg text-[#49733D]">{insect.name}</h3>
+                        <h3 className="text-lg text-[#49733D] font-medium">{insect.name}</h3>
                         <p className="text-[#49733D] mt-2">{insect.description}</p>
                         <div className="mt-4">
-                          <h4 className="text-[#49733D] mb-3">Preferowane rośliny:</h4>
+                          <h4 className="text-[#49733D] font-medium mb-3">Preferowane rośliny:</h4>
                           <div className="flex flex-wrap gap-3">
                             {getPlantsForInsect(insect.id).map(plant => (
                               <div key={plant.id} className="flex items-center gap-3 bg-white px-4 py-3 rounded-lg border border-[#A496D9]/20 shadow-sm">
@@ -929,7 +948,10 @@ export default function AdvancedGardenPlanner() {
                                   alt={plant.name}
                                   className="w-8 h-8 object-cover rounded"
                                 />
-                                <span className="text-sm text-[#49733D]">{plant.name}</span>
+                                <div>
+                                  <div className="text-sm text-[#49733D] font-medium">{plant.name}</div>
+                                  <DifficultyStars difficulty={plant.maintenance} />
+                                </div>
                               </div>
                             ))}
                           </div>
@@ -960,12 +982,15 @@ export default function AdvancedGardenPlanner() {
                             />
                           </div>
                           <div>
-                            <div className="text-[#49733D]">{plant.name}</div>
+                            <div className="text-[#49733D] font-medium">{plant.name}</div>
                             <div className="text-sm text-[#49733D]">
                               Kwitnienie: {plant.blooming.join(', ')}
                             </div>
                             <div className="text-xs text-[#49733D]/70 mt-1">
                               {plant.insects.join(', ')}
+                            </div>
+                            <div className="mt-2">
+                              <DifficultyStars difficulty={plant.maintenance} />
                             </div>
                           </div>
                         </div>
@@ -1030,7 +1055,7 @@ export default function AdvancedGardenPlanner() {
                   </div>
                   <div className="bg-white/60 p-3 rounded-xl border border-[#49733D]/20 text-center">
                     <div className="text-xl text-[#49733D]">
-                      {stats.waterBalance.balance >= 0 ? '✓' : '✗'}
+                      {stats.annualWaterNeed < 1000 ? '✓' : '⚠️'}
                     </div>
                     <div className="text-xs text-[#49733D]">Woda</div>
                   </div>
@@ -1040,19 +1065,23 @@ export default function AdvancedGardenPlanner() {
                   </div>
                 </div>
 
-                {/* Najlepsze przyciąganie owadów */}
+                {/* Trudność pielęgnacji */}
                 <div className="bg-white/60 p-3 rounded-xl border border-[#49733D]/20">
-                  <div className="text-sm text-[#49733D] font-medium mb-2">Najlepsze dla owadów:</div>
-                  {Object.entries(stats.insectAttraction)
-                    .sort(([,a], [,b]) => b.percentage - a.percentage)
-                    .slice(0, 2)
-                    .map(([insectId, data]) => (
-                      <div key={insectId} className="flex justify-between text-xs text-[#49733D]">
-                        <span>{data.insect.name}</span>
-                        <span>{data.percentage}%</span>
-                      </div>
-                    ))
-                  }
+                  <div className="text-sm text-[#49733D] font-medium mb-2">Trudność pielęgnacji:</div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-[#49733D]">{stats.maintenance.description}</span>
+                    <span className="text-xs text-[#49733D] font-medium">
+                      {stats.maintenance.averageDifficulty}/5
+                    </span>
+                  </div>
+                </div>
+
+                {/* Zapotrzebowanie na wodę */}
+                <div className="bg-white/60 p-3 rounded-xl border border-[#49733D]/20">
+                  <div className="text-sm text-[#49733D] font-medium mb-1">Zapotrzebowanie na wodę:</div>
+                  <div className="text-lg text-[#49733D] text-center font-medium">
+                    {stats.annualWaterNeed}L/rok
+                  </div>
                 </div>
               </div>
             </div>
