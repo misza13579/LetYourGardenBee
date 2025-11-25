@@ -6,7 +6,6 @@ exports.handler = async (event) => {
     };
   }
 
-  // Fix CORS
   const headers = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type',
@@ -14,7 +13,6 @@ exports.handler = async (event) => {
     'Content-Type': 'application/json',
   };
 
-  // Handle preflight
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 200, headers, body: '' };
   }
@@ -22,6 +20,7 @@ exports.handler = async (event) => {
   try {
     const { message } = JSON.parse(event.body);
 
+    // Użyj Hugging Face API - DARMOWE!
     const response = await fetch(
       "https://api-inference.huggingface.co/models/microsoft/DialoGPT-medium",
       {
@@ -30,9 +29,9 @@ exports.handler = async (event) => {
         },
         method: "POST",
         body: JSON.stringify({ 
-          inputs: message,
+          inputs: `Jesteś pomocnym asystentem ogrodowym specjalizującym się w roślinach przyjaznych owadom. Odpowiadaj w języku polskim. Pytanie: ${message}`,
           parameters: {
-            max_length: 500,
+            max_length: 200,
             temperature: 0.7,
             do_sample: true
           }
@@ -41,12 +40,12 @@ exports.handler = async (event) => {
     );
 
     if (!response.ok) {
-      throw new Error(`HF API error: ${response.status}`);
+      throw new Error(`API error: ${response.status}`);
     }
 
     const result = await response.json();
     
-    let reply = "Przepraszam, nie udało się uzyskać odpowiedzi.";
+    let reply = "Przepraszam, nie udało się uzyskać odpowiedzi. Spróbuj ponownie.";
     
     if (result && result.generated_text) {
       reply = result.generated_text;
@@ -62,12 +61,29 @@ exports.handler = async (event) => {
     
   } catch (error) {
     console.error('Error:', error);
+    
+    // Fallback - proste odpowiedzi gdy API nie działa
+    const fallbackResponses = {
+      'słonecznik': 'Słonecznik kwitnie od lipca do września, przyciąga pszczoły i trzmiele. Wysokość: 200-300 cm. Wymaga słonecznego stanowiska.',
+      'lawenda': 'Lawenda kwitnie od czerwca do sierpnia, przyciąga pszczoły i motyle. Odporna na suszę, preferuje glebę wapienną.',
+      'róża': 'Róża kwitnie od czerwca do września, przyciąga pszczoły. Wymaga żyznej gleby i regularnego nawożenia.',
+      'pszczoły': 'Pszczoły przyciągają: lawenda (9/10), słonecznik (8/10), róże (6/10). Potrzebują źródła wody.',
+      'motyle': 'Motyle najlepiej przyciąga lawenda (10/10). Preferują płaskie kwiatostany i rośliny żywicielskie.'
+    };
+
+    const lowerMessage = JSON.parse(event.body).message.toLowerCase();
+    let fallbackReply = "Dziękuję za pytanie! Jestem asystentem ogrodowym. Możesz zapytać o konkretne rośliny lub owady.";
+
+    Object.keys(fallbackResponses).forEach(key => {
+      if (lowerMessage.includes(key)) {
+        fallbackReply = fallbackResponses[key];
+      }
+    });
+
     return {
-      statusCode: 500,
+      statusCode: 200,
       headers,
-      body: JSON.stringify({ 
-        reply: 'Przepraszam, wystąpił błąd. Spróbuj ponownie za chwilę.' 
-      }),
+      body: JSON.stringify({ reply: fallbackReply }),
     };
   }
 };
