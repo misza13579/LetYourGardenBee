@@ -1,11 +1,4 @@
 exports.handler = async (event) => {
-  if (event.httpMethod !== 'POST') {
-    return { 
-      statusCode: 405, 
-      body: JSON.stringify({ error: 'Method Not Allowed' }) 
-    };
-  }
-
   const headers = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type',
@@ -19,38 +12,47 @@ exports.handler = async (event) => {
 
   try {
     const { message } = JSON.parse(event.body);
-
-    // Użyj Hugging Face API - DARMOWE!
+    
     const response = await fetch(
-      "https://api-inference.huggingface.co/models/microsoft/DialoGPT-medium",
+      "https://router.huggingface.co/v1/chat/completions",
       {
-        headers: { 
-          Authorization: `Bearer ${process.env.HUGGING_FACE_TOKEN}`,
+        headers: {
+          Authorization: `Bearer ${process.env.HF_TOKEN}`,
+          "Content-Type": "application/json",
         },
         method: "POST",
-        body: JSON.stringify({ 
-          inputs: `Jesteś pomocnym asystentem ogrodowym specjalizującym się w roślinach przyjaznych owadom. Odpowiadaj w języku polskim. Pytanie: ${message}`,
-          parameters: {
-            max_length: 200,
-            temperature: 0.7,
-            do_sample: true
-          }
+        body: JSON.stringify({
+          messages: [
+            {
+              role: "system",
+              content: `Jesteś pomocnym asystentem ogrodowym specjalizującym się w roślinach przyjaznych owadom. 
+              Odpowiadaj krótko, konkretnie i w języku polskim. 
+              Baza roślin: słonecznik, lawenda, róża.
+              Baza owadów: pszczoły, motyle.`
+            },
+            {
+              role: "user",
+              content: message,
+            },
+          ],
+          model: "meta-llama/Llama-3.1-8B-Instruct:novita",
+          max_tokens: 500,
+          temperature: 0.7,
         }),
       }
     );
 
     if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
+      throw new Error(`HF API error: ${response.status}`);
     }
 
     const result = await response.json();
+    console.log('HF Response:', JSON.stringify(result, null, 2));
     
-    let reply = "Przepraszam, nie udało się uzyskać odpowiedzi. Spróbuj ponownie.";
+    let reply = "Przepraszam, nie udało się uzyskać odpowiedzi.";
     
-    if (result && result.generated_text) {
-      reply = result.generated_text;
-    } else if (result && result[0] && result[0].generated_text) {
-      reply = result[0].generated_text;
+    if (result.choices && result.choices[0] && result.choices[0].message) {
+      reply = result.choices[0].message.content;
     }
 
     return {
@@ -62,28 +64,26 @@ exports.handler = async (event) => {
   } catch (error) {
     console.error('Error:', error);
     
-    // Fallback - proste odpowiedzi gdy API nie działa
     const fallbackResponses = {
-      'słonecznik': 'Słonecznik kwitnie od lipca do września, przyciąga pszczoły i trzmiele. Wysokość: 200-300 cm. Wymaga słonecznego stanowiska.',
-      'lawenda': 'Lawenda kwitnie od czerwca do sierpnia, przyciąga pszczoły i motyle. Odporna na suszę, preferuje glebę wapienną.',
-      'róża': 'Róża kwitnie od czerwca do września, przyciąga pszczoły. Wymaga żyznej gleby i regularnego nawożenia.',
-      'pszczoły': 'Pszczoły przyciągają: lawenda (9/10), słonecznik (8/10), róże (6/10). Potrzebują źródła wody.',
-      'motyle': 'Motyle najlepiej przyciąga lawenda (10/10). Preferują płaskie kwiatostany i rośliny żywicielskie.'
+      'słonecznik': '🌻 Słonecznik kwitnie od lipca do września, przyciąga pszczoły i trzmiele. Wysokość 2-3 metry.',
+      'lawenda': '💜 Lawenda kwitnie od czerwca do sierpnia, przyciąga pszczoły i motyle. Odporna na suszę.',
+      'róża': '🌹 Róża kwitnie od czerwca do września, przyciąga pszczoły. Wymaga regularnej pielęgnacji.',
+      'default': '🌿 Witaj! Jestem asystentem ogrodowym. Zapytaj mnie o rośliny przyjazne owadom!'
     };
 
     const lowerMessage = JSON.parse(event.body).message.toLowerCase();
-    let fallbackReply = "Dziękuję za pytanie! Jestem asystentem ogrodowym. Możesz zapytać o konkretne rośliny lub owady.";
+    let fallbackReply = fallbackResponses.default;
 
-    Object.keys(fallbackResponses).forEach(key => {
-      if (lowerMessage.includes(key)) {
-        fallbackReply = fallbackResponses[key];
-      }
-    });
+    if (lowerMessage.includes('słonecznik')) fallbackReply = fallbackResponses.słonecznik;
+    else if (lowerMessage.includes('lawenda')) fallbackReply = fallbackResponses.lawenda;
+    else if (lowerMessage.includes('róż') || lowerMessage.includes('roza')) fallbackReply = fallbackResponses.róża;
 
     return {
       statusCode: 200,
       headers,
-      body: JSON.stringify({ reply: fallbackReply }),
+      body: JSON.stringify({ 
+        reply: `[AI] ${fallbackReply}` 
+      }),
     };
   }
 };
