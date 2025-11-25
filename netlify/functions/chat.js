@@ -25,10 +25,7 @@ exports.handler = async (event) => {
           messages: [
             {
               role: "system",
-              content: `Jesteś pomocnym asystentem ogrodowym specjalizującym się w roślinach przyjaznych owadom. 
-              Odpowiadaj krótko, konkretnie i w języku polskim. 
-              Baza roślin: słonecznik, lawenda, róża.
-              Baza owadów: pszczoły, motyle.`
+              content: "Jesteś pomocnym asystentem ogrodowym specjalizującym się w roślinach przyjaznych owadom. Odpowiadaj krótko, konkretnie i w języku polskim. Baza roślin: słonecznik, lawenda, róża. Baza owadów: pszczoły, motyle."
             },
             {
               role: "user",
@@ -36,18 +33,18 @@ exports.handler = async (event) => {
             },
           ],
           model: "meta-llama/Llama-3.1-8B-Instruct:novita",
-          max_tokens: 500,
+          max_tokens: 300,
           temperature: 0.7,
         }),
       }
     );
 
     if (!response.ok) {
-      throw new Error(`HF API error: ${response.status}`);
+      const errorText = await response.text();
+      throw new Error(`HF API error: ${response.status} - ${errorText}`);
     }
 
     const result = await response.json();
-    console.log('HF Response:', JSON.stringify(result, null, 2));
     
     let reply = "Przepraszam, nie udało się uzyskać odpowiedzi.";
     
@@ -71,19 +68,30 @@ exports.handler = async (event) => {
       'default': '🌿 Witaj! Jestem asystentem ogrodowym. Zapytaj mnie o rośliny przyjazne owadom!'
     };
 
-    const lowerMessage = JSON.parse(event.body).message.toLowerCase();
-    let fallbackReply = fallbackResponses.default;
+    try {
+      const { message } = JSON.parse(event.body);
+      const lowerMessage = message.toLowerCase();
+      let fallbackReply = fallbackResponses.default;
 
-    if (lowerMessage.includes('słonecznik')) fallbackReply = fallbackResponses.słonecznik;
-    else if (lowerMessage.includes('lawenda')) fallbackReply = fallbackResponses.lawenda;
-    else if (lowerMessage.includes('róż') || lowerMessage.includes('roza')) fallbackReply = fallbackResponses.róża;
+      if (lowerMessage.includes('słonecznik')) fallbackReply = fallbackResponses.słonecznik;
+      else if (lowerMessage.includes('lawenda')) fallbackReply = fallbackResponses.lawenda;
+      else if (lowerMessage.includes('róż') || lowerMessage.includes('roza')) fallbackReply = fallbackResponses.róża;
 
-    return {
-      statusCode: 200,
-      headers,
-      body: JSON.stringify({ 
-        reply: `[AI] ${fallbackReply}` 
-      }),
-    };
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({ 
+          reply: fallbackReply 
+        }),
+      };
+    } catch (parseError) {
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({ 
+          reply: '🌿 Witaj! Jestem asystentem ogrodowym. Jak mogę pomóc?' 
+        }),
+      };
+    }
   }
 };
