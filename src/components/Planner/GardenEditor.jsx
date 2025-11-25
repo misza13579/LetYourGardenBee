@@ -1142,12 +1142,6 @@ const calculateAdvancedStats = () => {
       </div>
     </div>
 
-    <div className="bg-white/60 p-3 rounded-xl border border-[#49733D]/20">
-      <div className="text-sm text-[#49733D] font-medium mb-1">Zapotrzebowanie na wodę:</div>
-      <div className="text-lg text-[#49733D] text-center font-medium">
-        {stats.annualWaterNeed}L/rok
-      </div>
-    </div>
   </div>
 </div>
 
