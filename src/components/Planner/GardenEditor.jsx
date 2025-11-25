@@ -1,5 +1,10 @@
 import React, { useState } from "react";
 
+const createEmptyGarden = (width, height) => 
+  Array.from({ length: height }, () => 
+    Array.from({ length: width }, () => ({ type: 'empty' }))
+  );
+
 const PLANT_DATABASE = {
   sunflower: {
     id: 'sunflower',
