@@ -311,190 +311,191 @@ export default function AdvancedGardenPlanner() {
     setGarden(createEmptyGarden(customWidth, customHeight));
   };
 
-  const calculateAdvancedStats = () => {
-    const allCells = garden.flat();
-    const totalArea = gardenWidth * gardenHeight; 
+const calculateAdvancedStats = () => {
+  const allCells = garden.flat();
+  const totalArea = gardenWidth * gardenHeight; 
+  
+  const plantCells = allCells.filter(cell => cell.type === 'element' && cell.element.id in PLANT_DATABASE);
+  const terrainCells = allCells.filter(cell => cell.type === 'element' && cell.element.id in TERRAIN_ELEMENTS);
+  const waterSources = allCells.filter(cell => cell.element?.id === 'water').length;
+  const emptyCells = allCells.filter(cell => cell.type === 'empty').length;
+
+  const plantStats = plantCells.reduce((acc, cell) => {
+    const plantId = cell.element.id;
+    if (!acc[plantId]) {
+      acc[plantId] = { count: 0, area: 0, plant: PLANT_DATABASE[plantId] };
+    }
+    acc[plantId].count++;
+    acc[plantId].area++;
+    return acc;
+  }, {});
+
+  const annualWaterNeed = allCells.reduce((total, cell) => {
+    if (cell.type === 'element' && cell.element.waterNeed) {
+      return total + cell.element.waterNeed;
+    }
+    return total;
+  }, 0);
+
+  const maintenanceAnalysis = allCells.reduce((acc, cell) => {
+    if (cell.type === 'element' && cell.element.maintenance) {
+      acc.totalDifficulty += cell.element.maintenance;
+      acc.elementsWithDifficulty++;
+    }
+    return acc;
+  }, { totalDifficulty: 0, elementsWithDifficulty: 0 });
+
+  const averageDifficulty = maintenanceAnalysis.elementsWithDifficulty > 0 
+    ? (maintenanceAnalysis.totalDifficulty / maintenanceAnalysis.elementsWithDifficulty).toFixed(1)
+    : 0;
+
+  const getDifficultyDescription = (difficulty) => {
+    if (difficulty === 0) return 'Brak roślin';
+    if (difficulty < 2) return 'Bardzo łatwy';
+    if (difficulty < 3) return 'Łatwy';
+    if (difficulty < 4) return 'Średni';
+    return 'Trudny';
+  };
+
+  const insectAttraction = Object.keys(INSECTS_DATABASE).reduce((acc, insectId) => {
+    const insect = INSECTS_DATABASE[insectId];
+    let totalScore = 0;
+    let maxPossibleScore = 0;
+
+    Object.values(plantStats).forEach(stat => {
+      const score = insect.attractionScores[stat.plant.id] || 0;
+      totalScore += score * stat.area;
+      maxPossibleScore += 10 * stat.area; 
+    });
+
+    acc[insectId] = {
+      insect,
+      score: totalScore,
+      percentage: maxPossibleScore > 0 ? Math.round((totalScore / maxPossibleScore) * 100) : 0,
+      description: totalScore === 0 ? 'Brak roślin przyciągających' :
+                   totalScore < 20 ? 'Niskie przyciąganie' :
+                   totalScore < 50 ? 'Średnie przyciąganie' : 'Wysokie przyciąganie'
+    };
+    return acc;
+  }, {});
+
+  const bloomingContinuity = () => {
+    const months = ['IV', 'V', 'VI', 'VII', 'VIII', 'IX'];
+    const continuity = months.map(month => {
+      const bloomingCount = Object.values(plantStats).filter(stat => 
+        stat.plant.blooming.includes(month)
+      ).length;
+      return { month, bloomingCount, hasBlooming: bloomingCount > 0 };
+    });
     
-    const plantCells = allCells.filter(cell => cell.type === 'element' && cell.element.id in PLANT_DATABASE);
-    const terrainCells = allCells.filter(cell => cell.type === 'element' && cell.element.id in TERRAIN_ELEMENTS);
-    const waterSources = allCells.filter(cell => cell.element?.id === 'water').length;
-    const emptyCells = allCells.filter(cell => cell.type === 'empty').length;
+    const bloomingMonths = continuity.filter(m => m.hasBlooming).length;
+    const continuityScore = Math.round((bloomingMonths / months.length) * 100);
+    
+    return { continuity, score: continuityScore, gaps: months.length - bloomingMonths };
+  };
 
-    const plantStats = plantCells.reduce((acc, cell) => {
-      const plantId = cell.element.id;
-      if (!acc[plantId]) {
-        acc[plantId] = { count: 0, area: 0, plant: PLANT_DATABASE[plantId] };
+  const biodiversity = () => {
+    const plantTypes = new Set();
+    const insectTypes = new Set();
+    
+    allCells.forEach(cell => {
+      if (cell.type === 'element' && cell.element.id in PLANT_DATABASE) {
+        plantTypes.add(cell.element.id);
+        cell.element.insects?.forEach(insect => insectTypes.add(insect));
       }
-      acc[plantId].count++;
-      acc[plantId].area++;
-      return acc;
-    }, {});
-
-    const annualWaterNeed = allCells.reduce((total, cell) => {
-      if (cell.type === 'element' && cell.element.waterNeed) {
-        return total + cell.element.waterNeed;
-      }
-      return total;
-    }, 0);
-
-    const maintenanceAnalysis = allCells.reduce((acc, cell) => {
-      if (cell.type === 'element' && cell.element.maintenance) {
-        acc.totalDifficulty += cell.element.maintenance;
-        acc.elementsWithDifficulty++;
-      }
-      return acc;
-    }, { totalDifficulty: 0, elementsWithDifficulty: 0 });
-
-    const averageDifficulty = maintenanceAnalysis.elementsWithDifficulty > 0 
-      ? (maintenanceAnalysis.totalDifficulty / maintenanceAnalysis.elementsWithDifficulty).toFixed(1)
-      : 0;
-
-    const getDifficultyDescription = (difficulty) => {
-      if (difficulty === 0) return 'Brak roślin';
-      if (difficulty < 2) return 'Bardzo łatwy';
-      if (difficulty < 3) return 'Łatwy';
-      if (difficulty < 4) return 'Średni';
-      return 'Trudny';
-    };
-
-    const insectAttraction = Object.keys(INSECTS_DATABASE).reduce((acc, insectId) => {
-      const insect = INSECTS_DATABASE[insectId];
-      let totalScore = 0;
-      let maxPossibleScore = 0;
-
-      Object.values(plantStats).forEach(stat => {
-        const score = insect.attractionScores[stat.plant.id] || 0;
-        totalScore += score * stat.area;
-        maxPossibleScore += 10 * stat.area; 
-      });
-
-      acc[insectId] = {
-        insect,
-        score: totalScore,
-        percentage: maxPossibleScore > 0 ? Math.round((totalScore / maxPossibleScore) * 100) : 0,
-        description: totalScore === 0 ? 'Brak roślin przyciągających' :
-                     totalScore < 20 ? 'Niskie przyciąganie' :
-                     totalScore < 50 ? 'Średnie przyciąganie' : 'Wysokie przyciąganie'
-      };
-      return acc;
-    }, {});
-
-    const bloomingContinuity = () => {
-      const months = ['IV', 'V', 'VI', 'VII', 'VIII', 'IX'];
-      const continuity = months.map(month => {
-        const bloomingCount = Object.values(plantStats).filter(stat => 
-          stat.plant.blooming.includes(month)
-        ).length;
-        return { month, bloomingCount, hasBlooming: bloomingCount > 0 };
-      });
-      
-      const bloomingMonths = continuity.filter(m => m.hasBlooming).length;
-      const continuityScore = Math.round((bloomingMonths / months.length) * 100);
-      
-      return { continuity, score: continuityScore, gaps: months.length - bloomingMonths };
-    };
-
-    const biodiversity = () => {
-      const plantTypes = new Set();
-      const insectTypes = new Set();
-      
-      allCells.forEach(cell => {
-        if (cell.type === 'element' && cell.element.id in PLANT_DATABASE) {
-          plantTypes.add(cell.element.id);
-          cell.element.insects?.forEach(insect => insectTypes.add(insect));
-        }
-      });
-      
-      const plantDiversity = (plantTypes.size / Object.keys(PLANT_DATABASE).length) * 100;
-      const insectDiversity = (insectTypes.size / Object.keys(INSECTS_DATABASE).length) * 100;
-      
-      return {
-        plantTypes: plantTypes.size,
-        totalPlantTypes: Object.keys(PLANT_DATABASE).length,
-        insectTypes: insectTypes.size,
-        totalInsectTypes: Object.keys(INSECTS_DATABASE).length,
-        plantDiversity: Math.round(plantDiversity),
-        insectDiversity: Math.round(insectDiversity),
-        overallScore: Math.round((plantDiversity + insectDiversity) / 2)
-      };
-    };
-
-    const generateRecommendations = () => {
-      const recommendations = [];
-      const bio = biodiversity();
-      const continuity = bloomingContinuity();
-
-      if (bio.plantTypes < 2) {
-        recommendations.push({
-          type: 'biodiversity',
-          message: `Zwiększ różnorodność - masz tylko ${bio.plantTypes} rodzajów roślin`,
-          priority: 'high'
-        });
-      }
-
-      if (annualWaterNeed > 1000) {
-        recommendations.push({
-          type: 'water',
-          message: `Wysokie zapotrzebowanie na wodę: ${annualWaterNeed}L/rok - rozważ rośliny odporne na suszę`,
-          priority: 'medium'
-        });
-      }
-
-      if (continuity.gaps > 2) {
-        recommendations.push({
-          type: 'blooming',
-          message: `Uzupełnij kwitnienie - ${continuity.gaps} miesięcy bez kwitnienia`,
-          priority: 'medium'
-        });
-      }
-
-      if (emptyCells > totalArea * 0.4) {
-        recommendations.push({
-          type: 'space',
-          message: `Wykorzystaj tylko ${Math.round(((totalArea - emptyCells) / totalArea) * 100)}% powierzchni`,
-          priority: 'low'
-        });
-      }
-
-      if (averageDifficulty > 3.5) {
-        recommendations.push({
-          type: 'maintenance',
-          message: `Wysoka trudność pielęgnacji - rozważ łatwiejsze w utrzymaniu rośliny`,
-          priority: 'medium'
-        });
-      }
-
-      return recommendations.slice(0, 5);
-    };
-
+    });
+    
+    // POPRAWIONE: Ogranicz do maksymalnie 100%
+    const plantDiversity = Math.min((plantTypes.size / Object.keys(PLANT_DATABASE).length) * 100, 100);
+    const insectDiversity = Math.min((insectTypes.size / Object.keys(INSECTS_DATABASE).length) * 100, 100);
+    
     return {
-      totalArea,
-      plantArea: plantCells.length,
-      terrainArea: terrainCells.length,
-      emptyArea: emptyCells,
-      waterSources,
-      
-      plantStats,
-      annualWaterNeed,
-      maintenance: {
-        averageDifficulty: parseFloat(averageDifficulty),
-        description: getDifficultyDescription(parseFloat(averageDifficulty)),
-        totalElements: maintenanceAnalysis.elementsWithDifficulty
-      },
-      insectAttraction,
-      bloomingContinuity: bloomingContinuity(),
-      biodiversity: biodiversity(),
-      recommendations: generateRecommendations(),
-      
-      utilization: Math.round(((totalArea - emptyCells) / totalArea) * 100),
-      overallScore: Math.round(
-        (biodiversity().overallScore * 0.3 +
-         bloomingContinuity().score * 0.3 +
-         (annualWaterNeed < 500 ? 100 : annualWaterNeed < 1000 ? 80 : 60) * 0.2 +
-         (parseFloat(averageDifficulty) < 3 ? 100 : parseFloat(averageDifficulty) < 4 ? 80 : 60) * 0.2)
-      )
+      plantTypes: plantTypes.size,
+      totalPlantTypes: Object.keys(PLANT_DATABASE).length,
+      insectTypes: insectTypes.size,
+      totalInsectTypes: Object.keys(INSECTS_DATABASE).length,
+      plantDiversity: Math.round(plantDiversity),
+      insectDiversity: Math.round(insectDiversity),
+      overallScore: Math.round((plantDiversity + insectDiversity) / 2)
     };
   };
+
+  const generateRecommendations = () => {
+    const recommendations = [];
+    const bio = biodiversity();
+    const continuity = bloomingContinuity();
+
+    if (bio.plantTypes < 2) {
+      recommendations.push({
+        type: 'biodiversity',
+        message: `Zwiększ różnorodność - masz tylko ${bio.plantTypes} rodzajów roślin`,
+        priority: 'high'
+      });
+    }
+
+    if (annualWaterNeed > 1000) {
+      recommendations.push({
+        type: 'water',
+        message: `Wysokie zapotrzebowanie na wodę: ${annualWaterNeed}L/rok - rozważ rośliny odporne na suszę`,
+        priority: 'medium'
+      });
+    }
+
+    if (continuity.gaps > 2) {
+      recommendations.push({
+        type: 'blooming',
+        message: `Uzupełnij kwitnienie - ${continuity.gaps} miesięcy bez kwitnienia`,
+        priority: 'medium'
+      });
+    }
+
+    if (emptyCells > totalArea * 0.4) {
+      recommendations.push({
+        type: 'space',
+        message: `Wykorzystaj tylko ${Math.round(((totalArea - emptyCells) / totalArea) * 100)}% powierzchni`,
+        priority: 'low'
+      });
+    }
+
+    if (averageDifficulty > 3.5) {
+      recommendations.push({
+        type: 'maintenance',
+        message: `Wysoka trudność pielęgnacji - rozważ łatwiejsze w utrzymaniu rośliny`,
+        priority: 'medium'
+      });
+    }
+
+    return recommendations.slice(0, 5);
+  };
+
+  return {
+    totalArea,
+    plantArea: plantCells.length,
+    terrainArea: terrainCells.length,
+    emptyArea: emptyCells,
+    waterSources,
+    
+    plantStats,
+    annualWaterNeed,
+    maintenance: {
+      averageDifficulty: parseFloat(averageDifficulty),
+      description: getDifficultyDescription(parseFloat(averageDifficulty)),
+      totalElements: maintenanceAnalysis.elementsWithDifficulty
+    },
+    insectAttraction,
+    bloomingContinuity: bloomingContinuity(),
+    biodiversity: biodiversity(),
+    recommendations: generateRecommendations(),
+    
+    utilization: Math.round(((totalArea - emptyCells) / totalArea) * 100),
+    overallScore: Math.round(
+      (biodiversity().overallScore * 0.3 +
+       bloomingContinuity().score * 0.3 +
+       (annualWaterNeed < 500 ? 100 : annualWaterNeed < 1000 ? 80 : 60) * 0.2 +
+       (parseFloat(averageDifficulty) < 3 ? 100 : parseFloat(averageDifficulty) < 4 ? 80 : 60) * 0.2)
+    )
+  };
+};
 
   const stats = calculateAdvancedStats();
 
@@ -1099,58 +1100,56 @@ export default function AdvancedGardenPlanner() {
               </div>
             </div>
 
-            <div className="bg-white/80 backdrop-blur-lg rounded-2xl shadow-lg p-6 border border-[#A496D9]/20">
-              <h2 className="text-xl text-[#49733D] mb-4">Podsumowanie</h2>
-              <div className="space-y-4">
-                <div className="bg-white/60 p-4 rounded-xl border border-[#49733D]/20">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <div className="text-[#49733D]">Ogólna ocena</div>
-                      <div className="text-sm text-[#49733D]">Jakość projektu</div>
-                    </div>
-                    <div className="text-3xl text-[#49733D]">{stats.overallScore}%</div>
-                  </div>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-white/60 p-3 rounded-xl border border-[#49733D]/20 text-center">
-                    <div className="text-xl text-[#49733D]">{stats.biodiversity.overallScore}%</div>
-                    <div className="text-xs text-[#49733D]">Bioróżnorodność</div>
-                  </div>
-                  <div className="bg-white/60 p-3 rounded-xl border border-[#49733D]/20 text-center">
-                    <div className="text-xl text-[#49733D]">{stats.bloomingContinuity.score}%</div>
-                    <div className="text-xs text-[#49733D]">Kwitnienie</div>
-                  </div>
-                  <div className="bg-white/60 p-3 rounded-xl border border-[#49733D]/20 text-center">
-                    <div className="text-xl text-[#49733D]">
-                      {stats.annualWaterNeed < 1000 ? '✓' : '⚠️'}
-                    </div>
-                    <div className="text-xs text-[#49733D]">Woda</div>
-                  </div>
-                  <div className="bg-white/60 p-3 rounded-xl border border-[#49733D]/20 text-center">
-                    <div className="text-xl text-[#49733D]">{stats.utilization}%</div>
-                    <div className="text-xs text-[#49733D]">Wykorzystanie</div>
-                  </div>
-                </div>
+ <div className="bg-white/80 backdrop-blur-lg rounded-2xl shadow-lg p-6 border border-[#A496D9]/20">
+  <h2 className="text-xl text-[#49733D] mb-4">Podsumowanie</h2>
+  <div className="space-y-4">
+    <div className="bg-white/60 p-4 rounded-xl border border-[#49733D]/20">
+      <div className="flex justify-between items-center">
+        <div>
+          <div className="text-[#49733D]">Ogólna ocena</div>
+          <div className="text-sm text-[#49733D]">Jakość projektu</div>
+        </div>
+        <div className="text-3xl text-[#49733D]">{stats.overallScore}%</div>
+      </div>
+    </div>
+    
+    <div className="grid grid-cols-2 gap-4">
+      <div className="bg-white/60 p-3 rounded-xl border border-[#49733D]/20 text-center">
+        <div className="text-xl text-[#49733D]">{stats.biodiversity.overallScore}%</div>
+        <div className="text-xs text-[#49733D]">Bioróżnorodność</div>
+      </div>
+      <div className="bg-white/60 p-3 rounded-xl border border-[#49733D]/20 text-center">
+        <div className="text-xl text-[#49733D]">{stats.bloomingContinuity.score}%</div>
+        <div className="text-xs text-[#49733D]">Kwitnienie</div>
+      </div>
+      <div className="bg-white/60 p-3 rounded-xl border border-[#49733D]/20 text-center">
+        <div className="text-xl text-[#49733D]">{stats.annualWaterNeed}L</div>
+        <div className="text-xs text-[#49733D]">Woda/rok</div>
+      </div>
+      <div className="bg-white/60 p-3 rounded-xl border border-[#49733D]/20 text-center">
+        <div className="text-xl text-[#49733D]">{stats.utilization}%</div>
+        <div className="text-xs text-[#49733D]">Wykorzystanie</div>
+      </div>
+    </div>
 
-                <div className="bg-white/60 p-3 rounded-xl border border-[#49733D]/20">
-                  <div className="text-sm text-[#49733D] font-medium mb-2">Trudność pielęgnacji:</div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-[#49733D]">{stats.maintenance.description}</span>
-                    <span className="text-xs text-[#49733D] font-medium">
-                      {stats.maintenance.averageDifficulty}/5
-                    </span>
-                  </div>
-                </div>
+    <div className="bg-white/60 p-3 rounded-xl border border-[#49733D]/20">
+      <div className="text-sm text-[#49733D] font-medium mb-2">Trudność pielęgnacji:</div>
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-[#49733D]">{stats.maintenance.description}</span>
+        <span className="text-xs text-[#49733D] font-medium">
+          {stats.maintenance.averageDifficulty}/5
+        </span>
+      </div>
+    </div>
 
-                <div className="bg-white/60 p-3 rounded-xl border border-[#49733D]/20">
-                  <div className="text-sm text-[#49733D] font-medium mb-1">Zapotrzebowanie na wodę:</div>
-                  <div className="text-lg text-[#49733D] text-center font-medium">
-                    {stats.annualWaterNeed}L/rok
-                  </div>
-                </div>
-              </div>
-            </div>
+    <div className="bg-white/60 p-3 rounded-xl border border-[#49733D]/20">
+      <div className="text-sm text-[#49733D] font-medium mb-1">Zapotrzebowanie na wodę:</div>
+      <div className="text-lg text-[#49733D] text-center font-medium">
+        {stats.annualWaterNeed}L/rok
+      </div>
+    </div>
+  </div>
+</div>
 
             {(activeTab === 'plants' || activeTab === 'calendar') && (
               <div className="bg-white/80 backdrop-blur-lg rounded-2xl shadow-lg p-6 border border-[#A496D9]/20">
