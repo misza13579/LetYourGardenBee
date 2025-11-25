@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 
-// Rozszerzona baza roślin z poprawionymi parametrami
 const PLANT_DATABASE = {
   sunflower: {
     id: 'sunflower',
@@ -11,9 +10,9 @@ const PLANT_DATABASE = {
     sun: 'słoneczne',
     insects: ['pszczoły', 'trzmiele'],
     image: '/sloneczniki.png',
-    density: "1-2 rośliny/m²", // Czytelniejszy opis
-    waterNeed: 30, // litry/m²/rok
-    maintenance: 2, // trudność 1-5 (1=łatwa, 5=trudna)
+    density: "1-2 rośliny/m²", 
+    waterNeed: 30, 
+    maintenance: 2, 
     description: "Roślina jednoroczna, łatwa w uprawie, wymaga podpór"
   },
   lavender: {
@@ -46,7 +45,6 @@ const PLANT_DATABASE = {
   }
 };
 
-// Elementy terenu
 const TERRAIN_ELEMENTS = {
   grass: {
     id: 'grass',
@@ -59,7 +57,7 @@ const TERRAIN_ELEMENTS = {
     id: 'water',
     name: 'Woda',
     image: '/woda.png',
-    waterNeed: 0, // Źródła wody nie zużywają wody
+    waterNeed: 0, 
     maintenance: 1
   },
   building: {
@@ -78,7 +76,6 @@ const TERRAIN_ELEMENTS = {
   }
 };
 
-// Baza owadów z punktacją przyciągania
 const INSECTS_DATABASE = {
   bees: {
     id: 'bees',
@@ -106,20 +103,121 @@ const INSECTS_DATABASE = {
   }
 };
 
-// Kalendarz kwitnienia
 const BLOOMING_CALENDAR = {
-  IV: [], // Kwiecień
-  V: [],  // Maj
+  IV: [], 
+  V: [],  
   VI: ['rose', 'lavender'],
   VII: ['rose', 'lavender', 'sunflower'],
   VIII: ['rose', 'lavender', 'sunflower'],
   IX: ['rose', 'sunflower']
 };
 
-const createEmptyGarden = (width, height) => 
-  Array.from({ length: height }, () => 
-    Array.from({ length: width }, () => ({ type: 'empty' }))
+const GardenChatbotAI = () => {
+  const [messages, setMessages] = useState([
+    { type: 'bot', text: "Cześć! Jestem Twoim asystentem ogrodowym. Zapytaj mnie o rośliny, owady lub planowanie ogrodu! 🌸" }
+  ]);
+  const [inputText, setInputText] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
+  const callAI = async (userMessage) => {
+    setIsLoading(true);
+    
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          message: `Jesteś asystentem ogrodowym specjalizującym się w roślinach przyjaznych owadom. Odpowiadaj w języku polskim. Pytanie: ${userMessage}` 
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Network error');
+      }
+
+      const data = await response.json();
+      return data.reply;
+      
+    } catch (error) {
+      console.error('Błąd API:', error);
+      return "Przepraszam, mam problem z połączeniem. Spróbuj ponownie za chwilę.";
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSendMessage = async () => {
+    if (!inputText.trim() || isLoading) return;
+
+    const userMessage = { type: 'user', text: inputText };
+    setMessages(prev => [...prev, userMessage]);
+    setInputText('');
+    
+    const aiResponse = await callAI(inputText);
+    setMessages(prev => [...prev, { type: 'bot', text: aiResponse }]);
+  };
+
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
+
+  return (
+    <div className="bg-white/80 backdrop-blur-lg rounded-2xl shadow-lg p-6 border border-[#A496D9]/20 h-[400px] flex flex-col">
+      <h3 className="text-xl text-[#49733D] mb-4">Asystent Ogrodowy AI</h3>
+      
+      <div className="flex-1 overflow-y-auto mb-4 space-y-3">
+        {messages.map((message, index) => (
+          <div
+            key={index}
+            className={`p-3 rounded-xl max-w-[80%] ${
+              message.type === 'user'
+                ? 'bg-[#49733D] text-white ml-auto'
+                : 'bg-[#A496D9]/20 text-[#49733D]'
+            }`}
+          >
+            {message.text}
+          </div>
+        ))}
+        {isLoading && (
+          <div className="p-3 rounded-xl max-w-[80%] bg-[#A496D9]/20 text-[#49733D]">
+            <div className="flex items-center gap-2">
+              <div className="flex space-x-1">
+                <div className="w-2 h-2 bg-[#49733D] rounded-full animate-bounce"></div>
+                <div className="w-2 h-2 bg-[#49733D] rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                <div className="w-2 h-2 bg-[#49733D] rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+              </div>
+              <span>Asystent myśli...</span>
+            </div>
+          </div>
+        )}
+      </div>
+      
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={inputText}
+          onChange={(e) => setInputText(e.target.value)}
+          onKeyPress={handleKeyPress}
+          placeholder="Zapytaj o rośliny, owady lub pielęgnację..."
+          className="flex-1 px-3 py-2 border border-[#A496D9]/30 rounded-lg focus:outline-none focus:border-[#49733D]"
+          disabled={isLoading}
+        />
+        <button
+          onClick={handleSendMessage}
+          disabled={isLoading || !inputText.trim()}
+          className="px-4 py-2 bg-[#49733D] text-white rounded-lg hover:bg-[#49733D]/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {isLoading ? '...' : 'Wyślij'}
+        </button>
+      </div>
+    </div>
   );
+};
 
 export default function AdvancedGardenPlanner() {
   const [activeTab, setActiveTab] = useState('design');
@@ -136,7 +234,6 @@ export default function AdvancedGardenPlanner() {
   const [customHeight, setCustomHeight] = useState(12);
   const [deleteMode, setDeleteMode] = useState(false);
 
-  // Obsługa zaznaczania obszaru
   const handleCellMouseDown = (x, y) => {
     if (!selectedElement || deleteMode) return;
     setIsSelectingArea(true);
@@ -203,25 +300,21 @@ export default function AdvancedGardenPlanner() {
     });
   };
 
-  // Zmiana rozmiaru ogrodu
   const updateGardenSize = () => {
     setGardenWidth(customWidth);
     setGardenHeight(customHeight);
     setGarden(createEmptyGarden(customWidth, customHeight));
   };
 
-  // ZAawansowane obliczenia statystyk
   const calculateAdvancedStats = () => {
     const allCells = garden.flat();
-    const totalArea = gardenWidth * gardenHeight; // 1 kratka = 1m²
+    const totalArea = gardenWidth * gardenHeight; 
     
-    // Podstawowe statystyki
     const plantCells = allCells.filter(cell => cell.type === 'element' && cell.element.id in PLANT_DATABASE);
     const terrainCells = allCells.filter(cell => cell.type === 'element' && cell.element.id in TERRAIN_ELEMENTS);
     const waterSources = allCells.filter(cell => cell.element?.id === 'water').length;
     const emptyCells = allCells.filter(cell => cell.type === 'empty').length;
 
-    // Statystyki roślin
     const plantStats = plantCells.reduce((acc, cell) => {
       const plantId = cell.element.id;
       if (!acc[plantId]) {
@@ -232,7 +325,6 @@ export default function AdvancedGardenPlanner() {
       return acc;
     }, {});
 
-    // ROCZNE ZAPOTRZEBOWANIE NA WODĘ (w litrach)
     const annualWaterNeed = allCells.reduce((total, cell) => {
       if (cell.type === 'element' && cell.element.waterNeed) {
         return total + cell.element.waterNeed;
@@ -240,7 +332,6 @@ export default function AdvancedGardenPlanner() {
       return total;
     }, 0);
 
-    // TRUDNOŚĆ PIELĘGNACJI (średnia ważona)
     const maintenanceAnalysis = allCells.reduce((acc, cell) => {
       if (cell.type === 'element' && cell.element.maintenance) {
         acc.totalDifficulty += cell.element.maintenance;
@@ -253,7 +344,6 @@ export default function AdvancedGardenPlanner() {
       ? (maintenanceAnalysis.totalDifficulty / maintenanceAnalysis.elementsWithDifficulty).toFixed(1)
       : 0;
 
-    // Opis trudności
     const getDifficultyDescription = (difficulty) => {
       if (difficulty === 0) return 'Brak roślin';
       if (difficulty < 2) return 'Bardzo łatwy';
@@ -262,7 +352,6 @@ export default function AdvancedGardenPlanner() {
       return 'Trudny';
     };
 
-    // Przyciąganie owadów
     const insectAttraction = Object.keys(INSECTS_DATABASE).reduce((acc, insectId) => {
       const insect = INSECTS_DATABASE[insectId];
       let totalScore = 0;
@@ -271,7 +360,7 @@ export default function AdvancedGardenPlanner() {
       Object.values(plantStats).forEach(stat => {
         const score = insect.attractionScores[stat.plant.id] || 0;
         totalScore += score * stat.area;
-        maxPossibleScore += 10 * stat.area; // maksymalny wynik 10 na roślinę
+        maxPossibleScore += 10 * stat.area; 
       });
 
       acc[insectId] = {
@@ -285,7 +374,6 @@ export default function AdvancedGardenPlanner() {
       return acc;
     }, {});
 
-    // Ciągłość kwitnienia
     const bloomingContinuity = () => {
       const months = ['IV', 'V', 'VI', 'VII', 'VIII', 'IX'];
       const continuity = months.map(month => {
@@ -301,7 +389,6 @@ export default function AdvancedGardenPlanner() {
       return { continuity, score: continuityScore, gaps: months.length - bloomingMonths };
     };
 
-    // Wskaźnik bioróżnorodności
     const biodiversity = () => {
       const plantTypes = new Set();
       const insectTypes = new Set();
@@ -327,7 +414,6 @@ export default function AdvancedGardenPlanner() {
       };
     };
 
-    // Generowanie rekomendacji
     const generateRecommendations = () => {
       const recommendations = [];
       const bio = biodiversity();
@@ -373,18 +459,16 @@ export default function AdvancedGardenPlanner() {
         });
       }
 
-      return recommendations.slice(0, 5); // Maksymalnie 5 rekomendacji
+      return recommendations.slice(0, 5);
     };
 
     return {
-      // Podstawowe
       totalArea,
       plantArea: plantCells.length,
       terrainArea: terrainCells.length,
       emptyArea: emptyCells,
       waterSources,
       
-      // Zaawansowane
       plantStats,
       annualWaterNeed,
       maintenance: {
@@ -397,7 +481,6 @@ export default function AdvancedGardenPlanner() {
       biodiversity: biodiversity(),
       recommendations: generateRecommendations(),
       
-      // Wskaźniki ogólne
       utilization: Math.round(((totalArea - emptyCells) / totalArea) * 100),
       overallScore: Math.round(
         (biodiversity().overallScore * 0.3 +
@@ -419,7 +502,6 @@ export default function AdvancedGardenPlanner() {
     ? Object.values(PLANT_DATABASE)
     : Object.values(PLANT_DATABASE).filter(plant => plant.blooming.includes(seasonFilter));
 
-  // Sprawdza czy komórka jest w zaznaczonym obszarze
   const isCellInSelection = (x, y) => {
     if (!selectionStart || !selectionEnd) return false;
     const startX = Math.min(selectionStart.x, selectionEnd.x);
@@ -429,7 +511,6 @@ export default function AdvancedGardenPlanner() {
     return x >= startX && x <= endX && y >= startY && y <= endY;
   };
 
-  // Komponent gwiazdek dla trudności
   const DifficultyStars = ({ difficulty }) => {
     const fullStars = Math.floor(difficulty);
     const hasHalfStar = difficulty % 1 !== 0;
@@ -459,7 +540,6 @@ export default function AdvancedGardenPlanner() {
     <div className="min-h-screen bg-gradient-to-br from-[#A496D9]/10 via-white to-[#49733D]/10">
       <div className="container mx-auto px-4 py-8 max-w-8xl">
         
-        {/* Nagłówek i zakładki */}
         <div className="bg-white/80 backdrop-blur-lg rounded-2xl shadow-lg p-6 mb-8 border border-[#A496D9]/20">
           <div className="flex flex-col lg:flex-row justify-between items-center mb-6 gap-4">
             <h1 className="text-3xl text-[#49733D] text-center lg:text-left font-medium">
@@ -495,13 +575,10 @@ export default function AdvancedGardenPlanner() {
           </div>
         </div>
 
-        {/* Główna zawartość - 3 kolumny */}
         <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
           
-          {/* Lewa kolumna - Elementy */}
           <div className="xl:col-span-1 space-y-6">
             
-            {/* Kontrolki rozmiaru ogrodu */}
             <div className="bg-white/80 backdrop-blur-lg rounded-2xl shadow-lg p-6 border border-[#A496D9]/20">
               <h2 className="text-xl text-[#49733D] mb-4">Rozmiar Ogrodu</h2>
               
@@ -553,7 +630,6 @@ export default function AdvancedGardenPlanner() {
               </div>
             </div>
 
-            {/* Wybór elementów */}
             <div className="bg-white/80 backdrop-blur-lg rounded-2xl shadow-lg p-6 border border-[#A496D9]/20">
               <h2 className="text-xl text-[#49733D] mb-4">Elementy Ogrodu</h2>
               
@@ -590,7 +666,7 @@ export default function AdvancedGardenPlanner() {
               <div>
                 <h3 className="text-[#49733D] mb-3">Teren:</h3>
                 <div className="grid grid-cols-2 gap-3">
-                  {Object.values(TERRAIN_ELEMENTS).map(terrain => (
+                  {Object.values(TERRAIN_ELEMENTS).filter(terrain => terrain.id !== 'water').map(terrain => (
                     <div
                       key={terrain.id}
                       className={`p-3 border-2 rounded-xl cursor-pointer text-center transition-all duration-200 ${
@@ -613,7 +689,6 @@ export default function AdvancedGardenPlanner() {
             </div>
           </div>
 
-          {/* Środkowa kolumna - Ogród */}
           <div className="xl:col-span-2 bg-white/80 backdrop-blur-lg rounded-2xl shadow-lg p-6 border border-[#A496D9]/20">
             <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
               <h2 className="text-2xl text-[#49733D]">
@@ -628,7 +703,6 @@ export default function AdvancedGardenPlanner() {
               </div>
             </div>
 
-            {/* Zawartość w zależności od zakładki */}
             {activeTab === 'design' && (
               <div className="bg-white/60 border-2 border-[#A496D9]/30 rounded-xl p-6">
                 <div className="text-sm text-[#49733D] mb-4 text-center">
@@ -699,10 +773,9 @@ export default function AdvancedGardenPlanner() {
               </div>
             )}
 
-            {/* Statystyki */}
             {activeTab === 'stats' && (
               <div className="space-y-6 max-h-[600px] overflow-y-auto">
-                {/* Ogólne statystyki */}
+
                 <div className="bg-white/60 rounded-xl p-6 border border-[#A496D9]/20">
                   <h3 className="text-lg text-[#49733D] mb-4">Ogólne statystyki</h3>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -725,7 +798,6 @@ export default function AdvancedGardenPlanner() {
                   </div>
                 </div>
 
-                {/* Bioróżnorodność */}
                 <div className="bg-white/60 rounded-xl p-6 border border-[#A496D9]/20">
                   <h3 className="text-lg text-[#49733D] mb-4">Bioróżnorodność</h3>
                   <div className="space-y-3">
@@ -753,7 +825,6 @@ export default function AdvancedGardenPlanner() {
                   </div>
                 </div>
 
-                {/* Zapotrzebowanie na wodę */}
                 <div className="bg-white/60 rounded-xl p-6 border border-[#A496D9]/20">
                   <h3 className="text-lg text-[#49733D] mb-4">Zapotrzebowanie na wodę</h3>
                   <div className="space-y-4">
@@ -774,7 +845,6 @@ export default function AdvancedGardenPlanner() {
                   </div>
                 </div>
 
-                {/* Trudność pielęgnacji */}
                 <div className="bg-white/60 rounded-xl p-6 border border-[#A496D9]/20">
                   <h3 className="text-lg text-[#49733D] mb-4">Trudność pielęgnacji</h3>
                   <div className="space-y-4 text-center">
@@ -790,7 +860,6 @@ export default function AdvancedGardenPlanner() {
                   </div>
                 </div>
 
-                {/* Przyciąganie owadów */}
                 <div className="bg-white/60 rounded-xl p-6 border border-[#A496D9]/20">
                   <h3 className="text-lg text-[#49733D] mb-4">Przyciąganie owadów</h3>
                   <div className="space-y-3">
@@ -809,7 +878,6 @@ export default function AdvancedGardenPlanner() {
                   </div>
                 </div>
 
-                {/* Ciągłość kwitnienia */}
                 <div className="bg-white/60 rounded-xl p-6 border border-[#A496D9]/20">
                   <h3 className="text-lg text-[#49733D] mb-4">Ciągłość kwitnienia</h3>
                   <div className="space-y-2">
@@ -832,7 +900,6 @@ export default function AdvancedGardenPlanner() {
                   </div>
                 </div>
 
-                {/* Rekomendacje */}
                 {stats.recommendations.length > 0 && (
                   <div className="bg-white/60 rounded-xl p-6 border border-[#A496D9]/20">
                     <h3 className="text-lg text-[#49733D] mb-4">Rekomendacje</h3>
@@ -852,7 +919,6 @@ export default function AdvancedGardenPlanner() {
               </div>
             )}
 
-            {/* Pozostałe zakładki... */}
             {activeTab === 'plants' && (
               <div className="space-y-4 max-h-[600px] overflow-y-auto">
                 {filteredPlants.map(plant => (
@@ -1002,10 +1068,8 @@ export default function AdvancedGardenPlanner() {
             )}
           </div>
 
-          {/* Prawa kolumna - Statystyki i pomoc */}
           <div className="xl:col-span-1 space-y-6">
             
-            {/* Szybkie akcje */}
             <div className="bg-white/80 backdrop-blur-lg rounded-2xl shadow-lg p-6 border border-[#A496D9]/20">
               <h2 className="text-xl text-[#49733D] mb-4">Szybkie Akcje</h2>
               <div className="grid grid-cols-1 gap-3">
@@ -1030,7 +1094,6 @@ export default function AdvancedGardenPlanner() {
               </div>
             </div>
 
-            {/* Podsumowanie statystyk */}
             <div className="bg-white/80 backdrop-blur-lg rounded-2xl shadow-lg p-6 border border-[#A496D9]/20">
               <h2 className="text-xl text-[#49733D] mb-4">Podsumowanie</h2>
               <div className="space-y-4">
@@ -1065,7 +1128,6 @@ export default function AdvancedGardenPlanner() {
                   </div>
                 </div>
 
-                {/* Trudność pielęgnacji */}
                 <div className="bg-white/60 p-3 rounded-xl border border-[#49733D]/20">
                   <div className="text-sm text-[#49733D] font-medium mb-2">Trudność pielęgnacji:</div>
                   <div className="flex items-center justify-between">
@@ -1076,7 +1138,6 @@ export default function AdvancedGardenPlanner() {
                   </div>
                 </div>
 
-                {/* Zapotrzebowanie na wodę */}
                 <div className="bg-white/60 p-3 rounded-xl border border-[#49733D]/20">
                   <div className="text-sm text-[#49733D] font-medium mb-1">Zapotrzebowanie na wodę:</div>
                   <div className="text-lg text-[#49733D] text-center font-medium">
@@ -1086,7 +1147,6 @@ export default function AdvancedGardenPlanner() {
               </div>
             </div>
 
-            {/* Filtry sezonowe */}
             {(activeTab === 'plants' || activeTab === 'calendar') && (
               <div className="bg-white/80 backdrop-blur-lg rounded-2xl shadow-lg p-6 border border-[#A496D9]/20">
                 <h2 className="text-xl text-[#49733D] mb-4">Filtry Sezonowe</h2>
@@ -1115,6 +1175,12 @@ export default function AdvancedGardenPlanner() {
                 </div>
               </div>
             )}
+
+            <GardenChatbot 
+              plants={PLANT_DATABASE} 
+              insects={INSECTS_DATABASE}
+              onPlantSelect={setSelectedElement}
+            />
           </div>
         </div>
       </div>

@@ -2,7 +2,7 @@ import React from 'react';
 
 const PluginSection = () => {
   const pobierzWtyczke = () => {
-    alert('Dziękujemy za zainteresowanie naszą wtyczką! Wkrótce będzie dostępna do pobrania.');
+    window.open('https://drive.google.com/file/d/1RqN1NjHbpSGamgjACCO6k2hBcnCVSxIJ/view?usp=drive_link', '_blank');
   };
 
   return (

@@ -17,7 +17,6 @@ const HeroSection = () => {
 
   return (
     <div className="text-center">
-      {/* TYTUŁ STRONY JAKO VIDEO */}
       <div className="tytul-video h-200 max-w-full w-full mx-auto my-2 bg-transparent">
         <video
           id="tytul-video"
@@ -34,7 +33,6 @@ const HeroSection = () => {
         </video>
       </div>
 
-      {/* CYTAT JAKO VIDEO */}
       <div className="napis-video max-w-full w-full mx-auto my-2 bg-transparent">
         <video
           id="cytat-video"
