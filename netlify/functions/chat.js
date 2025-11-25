@@ -17,7 +17,7 @@ exports.handler = async (event) => {
       "https://router.huggingface.co/v1/chat/completions",
       {
         headers: {
-          Authorization: `Bearer ${process.env.HF_TOKEN}`,
+          Authorization: `Bearer ${process.env.HUGGING_FACE_TOKEN}`,
           "Content-Type": "application/json",
         },
         method: "POST",
